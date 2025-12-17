@@ -140,7 +140,6 @@ function loginPage() {
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-bold text-gray-800 mb-2">STELLA</h1>
                 <p class="text-gray-500">${t('welcome')}</p>
-                <p class="text-green-500 text-sm mt-2">✓ ${DATA.orders.length} orders, ${DATA.shipments.length} shipments</p>
             </div>
             <form id="loginForm" class="space-y-4">
                 <div>
@@ -154,9 +153,6 @@ function loginPage() {
                 <div id="err" class="hidden text-red-500 text-sm text-center"></div>
                 <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition">${t('login')}</button>
             </form>
-            <div class="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-500">
-                <strong>Dealers:</strong> ${[...new Set(DATA.orders.map(o => o.dealer_code))].filter(Boolean).join(', ')}
-            </div>
         </div>
     </div>`;
 }
