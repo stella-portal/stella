@@ -194,7 +194,7 @@ function mainContent() {
 
 function ordersPage() {
     const orders = DATA.orders
-        .filter(o => o.dealer_code === S.user?.dealer_code)
+        .filter(o => S.user?.isAdmin || o.dealer_code === S.user?.dealer_code)
         .sort((a, b) => {
             const dateA = new Date(a.order_date || 0);
             const dateB = new Date(b.order_date || 0);
@@ -207,7 +207,7 @@ function ordersPage() {
 
 function shipmentsPage() {
     const shipments = DATA.shipments
-        .filter(s => s.dealer_code === S.user?.dealer_code)
+        .filter(s => S.user?.isAdmin || s.dealer_code === S.user?.dealer_code)
         .sort((a, b) => {
             const dateA = new Date(fmtDate(a.order_date) || 0);
             const dateB = new Date(fmtDate(b.order_date) || 0);
@@ -486,9 +486,13 @@ function bind() {
             const dealer = DATA.dealers.find(d => d.dealer_code === code);
             
             const validPassword = PASSWORDS[code] === pass;
+            const isAdmin = code === 'ADMIN' && validPassword;
+            const hasData = dealerOrders.length > 0 || dealerShipments.length > 0 || dealer;
             
-            if ((dealerOrders.length > 0 || dealerShipments.length > 0 || dealer) && validPassword) {
-                S.user = dealer || { dealer_code: code, company_name: dealerOrders[0]?.dealer_name || dealerShipments[0]?.dealer_name || code };
+            if ((hasData || isAdmin) && validPassword) {
+                S.user = isAdmin 
+                    ? { dealer_code: 'ADMIN', company_name: 'Administrator', isAdmin: true }
+                    : dealer || { dealer_code: code, company_name: dealerOrders[0]?.dealer_name || dealerShipments[0]?.dealer_name || code };
                 S.lang = dealer?.language || 'en';
                 S.page = 'main';
                 S.tab = 'orders';
