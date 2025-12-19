@@ -55,20 +55,38 @@ const T = {
 const FLAGS = { en:'🇬🇧', de:'🇩🇪', it:'🇮🇹', tr:'🇹🇷', el:'🇬🇷', nl:'🇳🇱', hu:'🇭🇺', ru:'🇷🇺', es:'🇪🇸' };
 
 let DATA = { orders: [], orderItems: [], dealers: [], shipments: [], loaded: false, error: null };
-let S = { page: 'login', lang: 'en', user: null, selOrder: null, tab: 'orders' };
+
+// Load saved session from localStorage
+const savedSession = localStorage.getItem('stellaSession');
+let S = savedSession ? JSON.parse(savedSession) : { page: 'login', lang: 'en', user: null, selOrder: null, tab: 'orders' };
+
+// Save session function
+function saveSession() {
+    localStorage.setItem('stellaSession', JSON.stringify(S));
+}
 
 const t = k => T[S.lang]?.[k] || T.en[k] || k;
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const fmtDate = d => {
     if (!d) return '-';
+    let date;
     if (typeof d === 'string') {
-        if (d.includes('T')) return d.split('T')[0];
-        if (d.includes('-')) return d;
-        // Handle dd.mm.yyyy format
-        if (d.includes('.')) {
-            const parts = d.split('.');
-            if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        // Handle ISO format (2025-01-15 or 2025-01-15T...)
+        if (d.includes('T')) d = d.split('T')[0];
+        if (d.includes('-')) {
+            const parts = d.split('-');
+            if (parts.length === 3) {
+                return `${parts[2]}.${parts[1]}.${parts[0]}`;
+            }
         }
+        // Already in dd.mm.yyyy format
+        if (d.includes('.')) return d;
+    }
+    if (d instanceof Date) {
+        const day = d.getDate().toString().padStart(2, '0');
+        const month = (d.getMonth() + 1).toString().padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}.${month}.${year}`;
     }
     return d;
 };
@@ -135,20 +153,20 @@ function loginPage() {
     return `<div class="min-h-screen gradient-bg flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
             <div class="flex justify-center flex-wrap gap-2 mb-6">
-                ${Object.keys(FLAGS).map(l=>`<button onclick="setLang('${l}')" class="w-9 h-9 rounded-full ${S.lang===l?'ring-2 ring-blue-500':''} text-xl hover:scale-110 transition">${FLAGS[l]}</button>`).join('')}
+                ${Object.keys(FLAGS).map(l=>`<button type="button" onclick="setLang('${l}')" class="w-9 h-9 rounded-full ${S.lang===l?'ring-2 ring-blue-500':''} text-xl hover:scale-110 transition">${FLAGS[l]}</button>`).join('')}
             </div>
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-bold text-gray-800 mb-2">STELLA</h1>
                 <p class="text-gray-500">${t('welcome')}</p>
             </div>
-            <form id="loginForm" class="space-y-4">
+            <form id="loginForm" class="space-y-4" autocomplete="on">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('dealerCode')}</label>
-                    <input type="text" id="code" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="" autofocus>
+                    <input type="text" id="code" name="username" autocomplete="username" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500" autofocus>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">${t('password')}</label>
-                    <input type="password" id="pass" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="••••••••">
+                    <input type="password" id="pass" name="password" autocomplete="current-password" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500">
                 </div>
                 <div id="err" class="hidden text-red-500 text-sm text-center"></div>
                 <button type="submit" class="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition">${t('login')}</button>
@@ -212,12 +230,20 @@ function getWeekRange(date) {
     const monday = new Date(d.setDate(diff));
     const sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
-    return `${monday.getDate().toString().padStart(2,'0')}.${(monday.getMonth()+1).toString().padStart(2,'0')} - ${sunday.getDate().toString().padStart(2,'0')}.${(sunday.getMonth()+1).toString().padStart(2,'0')}`;
+    return `${monday.getDate().toString().padStart(2,'0')}.${(monday.getMonth()+1).toString().padStart(2,'0')}.${monday.getFullYear()} - ${sunday.getDate().toString().padStart(2,'0')}.${(sunday.getMonth()+1).toString().padStart(2,'0')}.${sunday.getFullYear()}`;
 }
 
 function ordersPage() {
+    // Filter: only orders from last 3 months and future
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    
     const orders = DATA.orders
         .filter(o => S.user?.isAdmin || o.dealer_code === S.user?.dealer_code)
+        .filter(o => {
+            const shipDate = new Date(o.ship_date_plan || o.order_date || 0);
+            return shipDate >= threeMonthsAgo;
+        })
         .sort((a, b) => {
             const dateA = new Date(a.ship_date_plan || a.order_date || 0);
             const dateB = new Date(b.ship_date_plan || b.order_date || 0);
@@ -506,10 +532,10 @@ function detailPage() {
     ${o.manager ? `<div class="mt-6 text-sm text-gray-500">${t('manager')}: ${o.manager}</div>` : ''}`;
 }
 
-function setLang(l) { S.lang = l; render(); }
-function setTab(tab) { S.tab = tab; render(); }
-function logout() { S = { page: 'login', lang: S.lang, user: null, selOrder: null, tab: 'orders' }; render(); }
-function viewOrder(id) { S.selOrder = id; S.page = 'detail'; render(); }
+function setLang(l) { S.lang = l; saveSession(); render(); }
+function setTab(tab) { S.tab = tab; saveSession(); render(); }
+function logout() { S = { page: 'login', lang: S.lang, user: null, selOrder: null, tab: 'orders' }; saveSession(); render(); }
+function viewOrder(id) { S.selOrder = id; S.page = 'detail'; saveSession(); render(); }
 function toggleShipment(id) {
     const el = document.getElementById('ship-' + id);
     if (el) el.classList.toggle('hidden');
@@ -553,6 +579,7 @@ function bind() {
                 S.lang = dealer?.language || 'en';
                 S.page = 'main';
                 S.tab = 'orders';
+                saveSession();
                 render();
             } else {
                 document.getElementById('err').textContent = t('error');
